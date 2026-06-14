@@ -1,0 +1,50 @@
+//@version=5
+// =====================================================
+// Volume Surge Strategy (Memecoin) - Strategy Lab
+// =====================================================
+// NOTE: Most memecoin strategies require on-chain data (holder, dev wallet,
+// bonding curve); these are not available in Pine Script.
+// Volume Surge and Tiered Exit are price/volume based, so in TradingView
+// they work. For other memecoin strategies, use the Python/TypeScript versions
+// use them (with off-chain API data).
+// =====================================================
+
+strategy("Volume Surge (Memecoin)", overlay=true,
+         default_qty_type=strategy.percent_of_equity, default_qty_value=10)
+
+volMultMin    = input.float(3.0, "Min Volume Multiplier")
+priceChg5m    = input.float(5.0, "Min Price Change %")
+bsRatioMin    = input.float(1.5, "Min Buy/Sell Proxy (up vol ratio)")
+volLookback   = input.int(12, "Volume Avg Lookback (bars)")
+tooLatePct    = input.float(100.0, "Too Late Threshold % (1h proxy)")
+
+// Volume surge
+avgVol  = ta.sma(volume, volLookback)
+volMult = volume / avgVol
+
+// Price momentum (5m proxy = current bar change)
+priceChange = ((close - close[1]) / close[1]) * 100
+// 1h proxy (12 x 5m bar)
+priceChange1h = ((close - close[12]) / close[12]) * 100
+
+// Buy pressure proxy: green candle volume / total
+upVol   = close > open ? volume : 0.0
+dnVol   = close < open ? volume : 0.0
+bsProxy = upVol / math.max(dnVol, 1)
+
+cond1 = volMult >= volMultMin
+cond2 = priceChange >= priceChg5m
+cond3 = close > open  // momentum up
+tooLate = priceChange1h > tooLatePct
+
+longSig = cond1 and cond2 and cond3 and not tooLate
+
+atrV = ta.atr(14)
+if longSig and strategy.position_size == 0
+    sl = close * 0.85
+    strategy.entry("VolSurge", strategy.long)
+    strategy.exit("X1", "VolSurge", stop=sl, limit=close * 1.7)
+
+plotshape(longSig, "Surge", shape.triangleup, location.belowbar, color.lime, size=size.normal)
+plotchar(volMult >= volMultMin, "VolSpike", "▲", location.bottom, color.aqua, size=size.tiny)
+alertcondition(longSig, "Volume Surge", "Memecoin volume surge detected")

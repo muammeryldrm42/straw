@@ -1,0 +1,43 @@
+//@version=5
+strategy("BB Squeeze Breakout", overlay=true,
+         default_qty_type=strategy.percent_of_equity, default_qty_value=10)
+
+bbLen   = input.int(20, "BB Period")
+bbStd   = input.float(2.0, "BB Std")
+sqLb    = input.int(50, "Squeeze Lookback")
+volMult = input.float(1.2, "Volume Mult")
+useVol  = input.bool(true, "Use Volume Filter")
+
+basis = ta.sma(close, bbLen)
+dev   = bbStd * ta.stdev(close, bbLen)
+upper = basis + dev
+lower = basis - dev
+width = (upper - lower) / basis
+
+avgVol = ta.sma(volume, 20)
+volOk  = not useVol or volume > avgVol * volMult
+
+// Squeeze: width below the 25th percentile over the last 5 candles
+widthQ25 = ta.percentile_nearest_rank(width, sqLb, 25)
+inSqueeze = ta.lowest(width, 5) < widthQ25
+
+longBO  = inSqueeze and close > upper and close[1] <= upper[1] and volOk
+shortBO = inSqueeze and close < lower and close[1] >= lower[1] and volOk
+
+if longBO and strategy.position_size == 0
+    sl   = basis
+    risk = close - sl
+    strategy.entry("BBs L", strategy.long)
+    strategy.exit("X", "BBs L", stop=sl, limit=close + risk * 2.5)
+
+if shortBO and strategy.position_size == 0
+    sl   = basis
+    risk = sl - close
+    strategy.entry("BBs S", strategy.short)
+    strategy.exit("X", "BBs S", stop=sl, limit=close - risk * 2.5)
+
+plot(upper, "Upper BB", color.red)
+plot(basis, "Mid BB", color.yellow)
+plot(lower, "Lower BB", color.green)
+plotshape(longBO,  "L", shape.triangleup,   location.belowbar, color.lime)
+plotshape(shortBO, "S", shape.triangledown, location.abovebar, color.red)

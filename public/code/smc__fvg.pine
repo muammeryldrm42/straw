@@ -1,0 +1,105 @@
+//@version=5
+// =====================================================
+// FVG (Fair Value Gap) Strategy - Strategy Lab
+// =====================================================
+// Detects gaps formed across 3 candles, enters on mitigation.
+// Bullish FVG: candle[2].high < candle[0].low
+// Bearish FVG: candle[2].low  > candle[0].high
+// =====================================================
+
+strategy("FVG Strategy", overlay=true, initial_capital=1000,
+         default_qty_type=strategy.percent_of_equity, default_qty_value=10,
+         commission_type=strategy.commission.percent, commission_value=0.05)
+
+// ============ INPUTS ============
+minGapAtr     = input.float(0.3, "Min Gap (ATR multiple)", minval=0.0, step=0.1)
+useTrendFilter= input.bool(true, "Use EMA Trend Filter")
+emaPeriod     = input.int(200, "EMA Period", minval=20)
+atrPeriod     = input.int(14, "ATR Period")
+slAtrMult     = input.float(0.5, "SL ATR Multiplier", minval=0.1, step=0.1)
+tp1RR         = input.float(2.0, "TP1 Risk:Reward")
+tp2RR         = input.float(3.0, "TP2 Risk:Reward")
+tp3RR         = input.float(5.0, "TP3 Risk:Reward")
+
+// ============ INDICATORS ============
+emaTrend = ta.ema(close, emaPeriod)
+atrVal   = ta.atr(atrPeriod)
+trendUp  = close > emaTrend
+trendDn  = close < emaTrend
+
+// ============ FVG DETECTION ============
+// candle[2] = 2 candles ago, candle[0] = now
+bullFVG = high[2] < low[0] and (low[0] - high[2]) >= atrVal * minGapAtr
+bearFVG = low[2]  > high[0] and (low[2] - high[0]) >= atrVal * minGapAtr
+
+// Draw box
+var box[] bullBoxes = array.new<box>()
+var box[] bearBoxes = array.new<box>()
+
+if bullFVG
+    b = box.new(bar_index - 2, low[0], bar_index + 20, high[2],
+                bgcolor=color.new(color.green, 80), border_color=color.green)
+    array.push(bullBoxes, b)
+
+if bearFVG
+    b = box.new(bar_index - 2, low[2], bar_index + 20, high[0],
+                bgcolor=color.new(color.red, 80), border_color=color.red)
+    array.push(bearBoxes, b)
+
+// ============ STATE TRACKING ============
+var float lastBullMid    = na
+var float lastBullBottom = na
+var float lastBullTop    = na
+var float lastBearMid    = na
+var float lastBearBottom = na
+var float lastBearTop    = na
+var bool  bullActive     = false
+var bool  bearActive     = false
+
+if bullFVG
+    lastBullBottom := high[2]
+    lastBullTop    := low[0]
+    lastBullMid    := (high[2] + low[0]) / 2
+    bullActive     := true
+
+if bearFVG
+    lastBearBottom := high[0]
+    lastBearTop    := low[2]
+    lastBearMid    := (low[2] + high[0]) / 2
+    bearActive     := true
+
+// ============ ENTRY LOGIC ============
+longCond  = bullActive and low <= lastBullMid and high > lastBullBottom
+           and (not useTrendFilter or trendUp)
+shortCond = bearActive and high >= lastBearMid and low < lastBearTop
+           and (not useTrendFilter or trendDn)
+
+// ============ RISK / TARGETS ============
+if longCond and strategy.position_size == 0
+    sl   = lastBullBottom - slAtrMult * atrVal
+    risk = lastBullMid - sl
+    tp1  = lastBullMid + risk * tp1RR
+    tp2  = lastBullMid + risk * tp2RR
+    tp3  = lastBullMid + risk * tp3RR
+    strategy.entry("FVG Long", strategy.long, limit=lastBullMid)
+    strategy.exit("Exit Long", "FVG Long", stop=sl, limit=tp2)
+    bullActive := false
+
+if shortCond and strategy.position_size == 0
+    sl   = lastBearTop + slAtrMult * atrVal
+    risk = sl - lastBearMid
+    tp1  = lastBearMid - risk * tp1RR
+    tp2  = lastBearMid - risk * tp2RR
+    tp3  = lastBearMid - risk * tp3RR
+    strategy.entry("FVG Short", strategy.short, limit=lastBearMid)
+    strategy.exit("Exit Short", "FVG Short", stop=sl, limit=tp2)
+    bearActive := false
+
+// ============ PLOTS ============
+plot(emaTrend, "EMA Trend", color=color.yellow, linewidth=2)
+plotshape(longCond,  "Long Setup",  shape.triangleup,   location.belowbar, color.green, size=size.small)
+plotshape(shortCond, "Short Setup", shape.triangledown, location.abovebar, color.red,   size=size.small)
+
+// ============ ALERTS ============
+alertcondition(longCond,  "FVG Long Entry",  "FVG Bullish mitigation - LONG entry")
+alertcondition(shortCond, "FVG Short Entry", "FVG Bearish mitigation - SHORT entry")

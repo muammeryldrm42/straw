@@ -1,0 +1,36 @@
+//@version=5
+strategy("Triple Confluence (EMA+RSI+MACD)", overlay=true,
+         default_qty_type=strategy.percent_of_equity, default_qty_value=10)
+
+emaFast = input.int(50, "EMA Fast")
+emaSlow = input.int(200, "EMA Slow")
+rsiLen  = input.int(14, "RSI Period")
+slAtrMult = input.float(2.0, "SL ATR Mult")
+
+emaF = ta.ema(close, emaFast)
+emaS = ta.ema(close, emaSlow)
+rsiV = ta.rsi(close, rsiLen)
+[macdL, sigL, hist] = ta.macd(close, 12, 26, 9)
+atrV = ta.atr(14)
+
+longCond = emaF > emaS and close > emaF and rsiV > 50 and rsiV < 70 and hist > 0 and macdL > sigL and hist > hist[1]
+shortCond = emaF < emaS and close < emaF and rsiV > 30 and rsiV < 50 and hist < 0 and macdL < sigL and hist < hist[1]
+
+if longCond and strategy.position_size == 0
+    sl = close - slAtrMult * atrV
+    risk = close - sl
+    strategy.entry("TC L", strategy.long)
+    strategy.exit("X", "TC L", stop=sl, limit=close + risk * 2.5)
+
+if shortCond and strategy.position_size == 0
+    sl = close + slAtrMult * atrV
+    risk = sl - close
+    strategy.entry("TC S", strategy.short)
+    strategy.exit("X", "TC S", stop=sl, limit=close - risk * 2.5)
+
+plot(emaF, "EMA Fast", color.aqua)
+plot(emaS, "EMA Slow", color.orange)
+plotshape(longCond,  "L", shape.triangleup,   location.belowbar, color.lime)
+plotshape(shortCond, "S", shape.triangledown, location.abovebar, color.red)
+alertcondition(longCond,  "TC Long",  "Triple Confluence LONG")
+alertcondition(shortCond, "TC Short", "Triple Confluence SHORT")

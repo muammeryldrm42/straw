@@ -1,0 +1,41 @@
+//@version=5
+strategy("EQH/EQL Sweep", overlay=true,
+         default_qty_type=strategy.percent_of_equity, default_qty_value=10)
+
+swingLb = input.int(5, "Swing LB")
+tolMult = input.float(0.15, "Tolerance ATR")
+
+atrVal = ta.atr(14)
+tol    = atrVal * tolMult
+ph     = ta.pivothigh(swingLb, swingLb)
+pl     = ta.pivotlow(swingLb, swingLb)
+
+var float h1 = na, var float h2 = na
+var float l1 = na, var float l2 = na
+if not na(ph)
+    h2 := h1, h1 := ph
+if not na(pl)
+    l2 := l1, l1 := pl
+
+eqh = not na(h1) and not na(h2) and math.abs(h1 - h2) <= tol ? math.max(h1, h2) : na
+eql = not na(l1) and not na(l2) and math.abs(l1 - l2) <= tol ? math.min(l1, l2) : na
+
+longSweep  = not na(eql) and low[1] < eql and close[1] > eql and close > open
+shortSweep = not na(eqh) and high[1] > eqh and close[1] < eqh and close < open
+
+if longSweep and strategy.position_size == 0
+    sl   = low[1] - 0.3 * atrVal
+    risk = close - sl
+    strategy.entry("EQ Long", strategy.long)
+    strategy.exit("X", "EQ Long", stop=sl, limit=close + risk * 3)
+
+if shortSweep and strategy.position_size == 0
+    sl   = high[1] + 0.3 * atrVal
+    risk = sl - close
+    strategy.entry("EQ Short", strategy.short)
+    strategy.exit("X", "EQ Short", stop=sl, limit=close - risk * 3)
+
+plot(eqh, "EQH", color.red, 2, plot.style_circles)
+plot(eql, "EQL", color.green, 2, plot.style_circles)
+plotshape(longSweep,  "L", shape.triangleup,   location.belowbar, color.lime)
+plotshape(shortSweep, "S", shape.triangledown, location.abovebar, color.red)
