@@ -1,0 +1,44 @@
+//@version=5
+strategy("Liquidity Grab + BOS", overlay=true,
+         default_qty_type=strategy.percent_of_equity, default_qty_value=10)
+
+swingLb   = input.int(10, "Swing Lookback")
+slAtrMult = input.float(0.3, "SL ATR Mult")
+tp2RR     = input.float(3.0, "TP RR")
+
+atrVal = ta.atr(14)
+ph = ta.pivothigh(swingLb, swingLb)
+pl = ta.pivotlow(swingLb, swingLb)
+
+var float lastSwingHigh = na
+var float lastSwingLow  = na
+if not na(ph)
+    lastSwingHigh := ph
+if not na(pl)
+    lastSwingLow  := pl
+
+// Bullish: sweep previous low + close up + then BOS up
+grabbedLow = not na(lastSwingLow) and low[1] < lastSwingLow and close[1] > lastSwingLow
+bosUp      = not na(lastSwingHigh) and close > lastSwingHigh
+longSig    = grabbedLow and bosUp
+
+grabbedHigh = not na(lastSwingHigh) and high[1] > lastSwingHigh and close[1] < lastSwingHigh
+bosDn       = not na(lastSwingLow) and close < lastSwingLow
+shortSig    = grabbedHigh and bosDn
+
+if longSig and strategy.position_size == 0
+    sl   = low[1] - slAtrMult * atrVal
+    risk = close - sl
+    strategy.entry("LG Long", strategy.long)
+    strategy.exit("X", "LG Long", stop=sl, limit=close + risk * tp2RR)
+
+if shortSig and strategy.position_size == 0
+    sl   = high[1] + slAtrMult * atrVal
+    risk = sl - close
+    strategy.entry("LG Short", strategy.short)
+    strategy.exit("X", "LG Short", stop=sl, limit=close - risk * tp2RR)
+
+plotshape(longSig,  "Long",  shape.triangleup,   location.belowbar, color.lime, size=size.normal)
+plotshape(shortSig, "Short", shape.triangledown, location.abovebar, color.red,  size=size.normal)
+alertcondition(longSig,  "LG+BOS Long",  "Liquidity grab + BOS up")
+alertcondition(shortSig, "LG+BOS Short", "Liquidity grab + BOS down")

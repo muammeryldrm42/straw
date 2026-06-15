@@ -1,0 +1,52 @@
+//@version=5
+strategy("Breaker Block", overlay=true,
+         default_qty_type=strategy.percent_of_equity, default_qty_value=10)
+
+impulseAtr = input.float(1.2, "Impulse ATR")
+emaP       = input.int(200, "Trend EMA")
+
+atrVal = ta.atr(14)
+emaT   = ta.ema(close, emaP)
+
+bullOB = close[1] < open[1] and (high - low[1]) >= atrVal * impulseAtr and close > high[1]
+bearOB = close[1] > open[1] and (high[1] - low) >= atrVal * impulseAtr and close < low[1]
+
+var float bullTop = na, var float bullBot = na, var bool bullBroken = false
+var float bearTop = na, var float bearBot = na, var bool bearBroken = false
+
+if bullOB
+    bullTop := high[1]
+    bullBot := low[1]
+    bullBroken := false
+
+if bearOB
+    bearTop := high[1]
+    bearBot := low[1]
+    bearBroken := false
+
+if not na(bullBot) and close < bullBot
+    bullBroken := true
+if not na(bearTop) and close > bearTop
+    bearBroken := true
+
+// Failed bullish OB -> short on retest
+shortBreaker = bullBroken and high >= bullBot and low <= bullTop and close < emaT
+// Failed bearish OB -> long on retest
+longBreaker  = bearBroken and high >= bearBot and low <= bearTop and close > emaT
+
+if longBreaker and strategy.position_size == 0
+    sl   = bearBot - 0.5 * atrVal
+    entry= (bearTop + bearBot) / 2
+    risk = entry - sl
+    strategy.entry("Breaker L", strategy.long, limit=entry)
+    strategy.exit("X", "Breaker L", stop=sl, limit=entry + risk * 3)
+
+if shortBreaker and strategy.position_size == 0
+    sl   = bullTop + 0.5 * atrVal
+    entry= (bullTop + bullBot) / 2
+    risk = sl - entry
+    strategy.entry("Breaker S", strategy.short, limit=entry)
+    strategy.exit("X", "Breaker S", stop=sl, limit=entry - risk * 3)
+
+plotshape(longBreaker,  "BL", shape.triangleup,   location.belowbar, color.aqua)
+plotshape(shortBreaker, "BS", shape.triangledown, location.abovebar, color.fuchsia)

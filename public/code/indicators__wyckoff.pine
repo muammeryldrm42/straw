@@ -1,0 +1,35 @@
+//@version=5
+strategy("Wyckoff Phase", overlay=true,
+         default_qty_type=strategy.percent_of_equity, default_qty_value=10)
+
+rangeLb = input.int(30, "Range Lookback")
+volLb   = input.int(50, "Volume Lookback")
+volMult = input.float(1.5, "High Vol Mult")
+
+atrV      = ta.atr(14)
+rangeHigh = ta.highest(high[1], rangeLb)
+rangeLow  = ta.lowest(low[1],   rangeLb)
+rangeSize = rangeHigh - rangeLow
+avgVol    = ta.sma(volume, volLb)
+highVol   = volume > avgVol * volMult
+
+rangeAtrRatio = rangeSize / atrV
+isConsol = rangeAtrRatio < 8
+
+spring   = isConsol and low < rangeLow  and close > rangeLow  and close > open and highVol
+upthrust = isConsol and high > rangeHigh and close < rangeHigh and close < open and highVol
+
+if spring and strategy.position_size == 0
+    sl = low - 0.5 * atrV
+    strategy.entry("Spring", strategy.long)
+    strategy.exit("X", "Spring", stop=sl, limit=rangeHigh + rangeSize * 0.5)
+
+if upthrust and strategy.position_size == 0
+    sl = high + 0.5 * atrV
+    strategy.entry("Upthrust", strategy.short)
+    strategy.exit("X", "Upthrust", stop=sl, limit=rangeLow - rangeSize * 0.5)
+
+plot(rangeHigh, "Range High", color.red, 1)
+plot(rangeLow,  "Range Low",  color.green, 1)
+plotshape(spring,   "Spring",   shape.triangleup,   location.belowbar, color.lime, size=size.normal)
+plotshape(upthrust, "Upthrust", shape.triangledown, location.abovebar, color.red,  size=size.normal)

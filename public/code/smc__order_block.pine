@@ -1,0 +1,61 @@
+//@version=5
+strategy("Order Block Strategy", overlay=true,
+         default_qty_type=strategy.percent_of_equity, default_qty_value=10)
+
+impulseAtr   = input.float(1.5, "Impulse Strength (ATR)", minval=0.5)
+useTrend     = input.bool(true, "Use Trend Filter")
+emaPeriod    = input.int(200, "EMA Period")
+slAtrMult    = input.float(0.5, "SL ATR Mult")
+tp1RR        = input.float(2.0, "TP1 RR")
+tp2RR        = input.float(3.0, "TP2 RR")
+
+atrVal   = ta.atr(14)
+emaTrend = ta.ema(close, emaPeriod)
+trendUp  = close > emaTrend
+trendDn  = close < emaTrend
+
+// Bullish OB: red candle + following strong green impulse
+bullOB = close[1] < open[1] and (high - low[1]) >= atrVal * impulseAtr and close > high[1]
+// Bearish OB: green candle + following strong red impulse
+bearOB = close[1] > open[1] and (high[1] - low) >= atrVal * impulseAtr and close < low[1]
+
+var float bullTop    = na
+var float bullBottom = na
+var float bearTop    = na
+var float bearBottom = na
+
+if bullOB
+    bullTop    := high[1]
+    bullBottom := low[1]
+    box.new(bar_index - 1, bullTop, bar_index + 30, bullBottom,
+            bgcolor=color.new(color.green, 85), border_color=color.green)
+
+if bearOB
+    bearTop    := high[1]
+    bearBottom := low[1]
+    box.new(bar_index - 1, bearTop, bar_index + 30, bearBottom,
+            bgcolor=color.new(color.red, 85), border_color=color.red)
+
+longRetest  = not na(bullTop)  and low <= bullTop  and high >= bullBottom and (not useTrend or trendUp)
+shortRetest = not na(bearTop)  and high >= bearBottom and low <= bearTop  and (not useTrend or trendDn)
+
+if longRetest and strategy.position_size == 0
+    entry = (bullTop + bullBottom) / 2
+    sl    = bullBottom - slAtrMult * atrVal
+    risk  = entry - sl
+    strategy.entry("OB Long", strategy.long, limit=entry)
+    strategy.exit("X Long", "OB Long", stop=sl, limit=entry + risk * tp2RR)
+    bullTop := na
+
+if shortRetest and strategy.position_size == 0
+    entry = (bearTop + bearBottom) / 2
+    sl    = bearTop + slAtrMult * atrVal
+    risk  = sl - entry
+    strategy.entry("OB Short", strategy.short, limit=entry)
+    strategy.exit("X Short", "OB Short", stop=sl, limit=entry - risk * tp2RR)
+    bearTop := na
+
+plotshape(longRetest,  "Long OB",  shape.triangleup,   location.belowbar, color.green)
+plotshape(shortRetest, "Short OB", shape.triangledown, location.abovebar, color.red)
+alertcondition(longRetest,  "OB Long",  "Order Block bullish retest")
+alertcondition(shortRetest, "OB Short", "Order Block bearish retest")

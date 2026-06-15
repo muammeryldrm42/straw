@@ -1,0 +1,50 @@
+//@version=5
+strategy("OTE (Optimal Trade Entry)", overlay=true,
+         default_qty_type=strategy.percent_of_equity, default_qty_value=10)
+
+swingLb = input.int(10, "Swing LB")
+fibLow  = input.float(0.62, "Fib Low")
+fibHigh = input.float(0.79, "Fib High")
+emaP    = input.int(200, "Trend EMA")
+
+atrVal = ta.atr(14)
+emaT   = ta.ema(close, emaP)
+ph     = ta.pivothigh(swingLb, swingLb)
+pl     = ta.pivotlow(swingLb, swingLb)
+
+var float lastSH = na, var int lastSHIdx = na
+var float lastSL = na, var int lastSLIdx = na
+if not na(ph)
+    lastSH := ph
+    lastSHIdx := bar_index - swingLb
+if not na(pl)
+    lastSL := pl
+    lastSLIdx := bar_index - swingLb
+
+upImpulse = not na(lastSHIdx) and not na(lastSLIdx) and lastSHIdx > lastSLIdx
+dnImpulse = not na(lastSHIdx) and not na(lastSLIdx) and lastSLIdx > lastSHIdx
+
+oteHighL = upImpulse ? lastSH - (lastSH - lastSL) * fibLow  : na
+oteLowL  = upImpulse ? lastSH - (lastSH - lastSL) * fibHigh : na
+oteLowS  = dnImpulse ? lastSL + (lastSH - lastSL) * fibLow  : na
+oteHighS = dnImpulse ? lastSL + (lastSH - lastSL) * fibHigh : na
+
+longSig  = upImpulse and close >= oteLowL and close <= oteHighL and close > emaT
+shortSig = dnImpulse and close >= oteLowS and close <= oteHighS and close < emaT
+
+if longSig and strategy.position_size == 0
+    sl   = lastSL - 0.3 * atrVal
+    entry= (oteLowL + oteHighL) / 2
+    risk = entry - sl
+    strategy.entry("OTE L", strategy.long, limit=entry)
+    strategy.exit("X", "OTE L", stop=sl, limit=lastSH)
+
+if shortSig and strategy.position_size == 0
+    sl   = lastSH + 0.3 * atrVal
+    entry= (oteLowS + oteHighS) / 2
+    risk = sl - entry
+    strategy.entry("OTE S", strategy.short, limit=entry)
+    strategy.exit("X", "OTE S", stop=sl, limit=lastSL)
+
+plotshape(longSig,  "L", shape.triangleup,   location.belowbar, color.lime)
+plotshape(shortSig, "S", shape.triangledown, location.abovebar, color.red)

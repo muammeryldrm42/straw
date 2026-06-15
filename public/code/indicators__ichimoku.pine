@@ -1,0 +1,45 @@
+//@version=5
+strategy("Ichimoku Breakout", overlay=true,
+         default_qty_type=strategy.percent_of_equity, default_qty_value=10)
+
+tenkanLen = input.int(9, "Tenkan")
+kijunLen  = input.int(26, "Kijun")
+senkouLen = input.int(52, "Senkou B")
+
+tenkan = (ta.highest(high, tenkanLen) + ta.lowest(low, tenkanLen)) / 2
+kijun  = (ta.highest(high, kijunLen) + ta.lowest(low, kijunLen)) / 2
+senkouA = ((tenkan + kijun) / 2)
+senkouB = (ta.highest(high, senkouLen) + ta.lowest(low, senkouLen)) / 2
+
+cloudTop = math.max(senkouA[kijunLen], senkouB[kijunLen])
+cloudBot = math.min(senkouA[kijunLen], senkouB[kijunLen])
+kumoGreen = senkouA[kijunLen] > senkouB[kijunLen]
+
+tkUp = ta.crossover(tenkan, kijun)
+tkDn = ta.crossunder(tenkan, kijun)
+
+longSig  = close > cloudTop and tkUp and kumoGreen
+shortSig = close < cloudBot and tkDn and not kumoGreen
+
+if longSig and strategy.position_size == 0
+    sl = kijun
+    risk = close - sl
+    if risk > 0
+        strategy.entry("Ich L", strategy.long)
+        strategy.exit("X", "Ich L", stop=sl, limit=close + risk * 3)
+
+if shortSig and strategy.position_size == 0
+    sl = kijun
+    risk = sl - close
+    if risk > 0
+        strategy.entry("Ich S", strategy.short)
+        strategy.exit("X", "Ich S", stop=sl, limit=close - risk * 3)
+
+plot(tenkan, "Tenkan", color.red)
+plot(kijun,  "Kijun",  color.blue)
+p1 = plot(senkouA, "Senkou A", color.green, offset=kijunLen)
+p2 = plot(senkouB, "Senkou B", color.red,   offset=kijunLen)
+fill(p1, p2, color=kumoGreen ? color.new(color.green, 80) : color.new(color.red, 80))
+
+plotshape(longSig,  "L", shape.triangleup,   location.belowbar, color.lime)
+plotshape(shortSig, "S", shape.triangledown, location.abovebar, color.red)
