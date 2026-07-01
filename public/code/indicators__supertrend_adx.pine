@@ -1,0 +1,37 @@
+//@version=5
+strategy("Supertrend + ADX", overlay=true,
+         default_qty_type=strategy.percent_of_equity, default_qty_value=10)
+
+stPeriod = input.int(10, "ST Period")
+stMult   = input.float(3.0, "ST Mult")
+adxLen   = input.int(14, "ADX Length")
+adxThr   = input.float(25, "ADX Threshold")
+
+[st, dir] = ta.supertrend(stMult, stPeriod)
+[diPlus, diMinus, adxV] = ta.dmi(adxLen, adxLen)
+
+flippedUp = dir == -1 and dir[1] == 1   // -1 = uptrend in ta.supertrend
+flippedDn = dir == 1 and dir[1] == -1
+
+strong = adxV > adxThr
+
+longSig  = flippedUp and strong
+shortSig = flippedDn and strong
+
+if longSig and strategy.position_size == 0
+    sl = st
+    risk = close - sl
+    if risk > 0
+        strategy.entry("ST L", strategy.long)
+        strategy.exit("X", "ST L", stop=sl, limit=close + risk * 2.5)
+
+if shortSig and strategy.position_size == 0
+    sl = st
+    risk = sl - close
+    if risk > 0
+        strategy.entry("ST S", strategy.short)
+        strategy.exit("X", "ST S", stop=sl, limit=close - risk * 2.5)
+
+plot(st, "Supertrend", color=dir < 0 ? color.green : color.red, linewidth=2)
+plotshape(longSig,  "L", shape.triangleup,   location.belowbar, color.lime)
+plotshape(shortSig, "S", shape.triangledown, location.abovebar, color.red)

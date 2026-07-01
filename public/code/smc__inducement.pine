@@ -1,0 +1,37 @@
+//@version=5
+strategy("Inducement", overlay=true,
+         default_qty_type=strategy.percent_of_equity, default_qty_value=10)
+
+swingLb = input.int(8, "Swing Lookback")
+atrVal  = ta.atr(14)
+ph      = ta.pivothigh(swingLb, swingLb)
+pl      = ta.pivotlow(swingLb, swingLb)
+
+var float lastSH = na
+var float lastSL = na
+if not na(ph)
+    lastSH := ph
+if not na(pl)
+    lastSL := pl
+
+// Is there inducement in the last 3 candles
+wickBelow = (low[1] < lastSL and close[1] > lastSL) or (low[2] < lastSL and close[2] > lastSL) or (low[3] < lastSL and close[3] > lastSL)
+wickAbove = (high[1] > lastSH and close[1] < lastSH) or (high[2] > lastSH and close[2] < lastSH) or (high[3] > lastSH and close[3] < lastSH)
+
+longSig  = wickBelow and close > open and close > math.max(high[1], high[2], high[3])
+shortSig = wickAbove and close < open and close < math.min(low[1], low[2], low[3])
+
+if longSig and strategy.position_size == 0
+    sl   = math.min(low[1], low[2], low[3]) - 0.3 * atrVal
+    risk = close - sl
+    strategy.entry("Ind Long", strategy.long)
+    strategy.exit("X", "Ind Long", stop=sl, limit=close + risk * 3)
+
+if shortSig and strategy.position_size == 0
+    sl   = math.max(high[1], high[2], high[3]) + 0.3 * atrVal
+    risk = sl - close
+    strategy.entry("Ind Short", strategy.short)
+    strategy.exit("X", "Ind Short", stop=sl, limit=close - risk * 3)
+
+plotshape(longSig,  "L", shape.triangleup,   location.belowbar, color.lime)
+plotshape(shortSig, "S", shape.triangledown, location.abovebar, color.red)

@@ -1,0 +1,52 @@
+//@version=5
+strategy("RSI Divergence", overlay=true,
+         default_qty_type=strategy.percent_of_equity, default_qty_value=10)
+
+rsiLen  = input.int(14, "RSI Period")
+pivotLb = input.int(5, "Pivot Lookback")
+
+rsiV = ta.rsi(close, rsiLen)
+atrV = ta.atr(14)
+
+// Pivotlar
+ph = ta.pivothigh(high, pivotLb, pivotLb)
+pl = ta.pivotlow(low,  pivotLb, pivotLb)
+phRsi = ta.pivothigh(rsiV, pivotLb, pivotLb)
+plRsi = ta.pivotlow(rsiV,  pivotLb, pivotLb)
+
+var float prevPL = na, var float prevPLRsi = na
+var float prevPH = na, var float prevPHRsi = na
+var float currPL = na, var float currPLRsi = na
+var float currPH = na, var float currPHRsi = na
+
+if not na(pl)
+    prevPL := currPL
+    prevPLRsi := currPLRsi
+    currPL := pl
+    currPLRsi := rsiV[pivotLb]
+
+if not na(ph)
+    prevPH := currPH
+    prevPHRsi := currPHRsi
+    currPH := ph
+    currPHRsi := rsiV[pivotLb]
+
+bullDiv = not na(prevPL) and not na(currPL) and currPL < prevPL and currPLRsi > prevPLRsi and currPLRsi < 40
+bearDiv = not na(prevPH) and not na(currPH) and currPH > prevPH and currPHRsi < prevPHRsi and currPHRsi > 60
+
+if bullDiv and strategy.position_size == 0
+    sl = currPL - 0.3 * atrV
+    risk = close - sl
+    if risk > 0
+        strategy.entry("Div L", strategy.long)
+        strategy.exit("X", "Div L", stop=sl, limit=close + risk * 3)
+
+if bearDiv and strategy.position_size == 0
+    sl = currPH + 0.3 * atrV
+    risk = sl - close
+    if risk > 0
+        strategy.entry("Div S", strategy.short)
+        strategy.exit("X", "Div S", stop=sl, limit=close - risk * 3)
+
+plotshape(bullDiv, "Bull Div", shape.triangleup,   location.belowbar, color.lime, size=size.normal)
+plotshape(bearDiv, "Bear Div", shape.triangledown, location.abovebar, color.red,  size=size.normal)
