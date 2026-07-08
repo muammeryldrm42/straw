@@ -1,0 +1,30 @@
+//@version=5
+strategy("VWAP + Volume", overlay=true,
+         default_qty_type=strategy.percent_of_equity, default_qty_value=10)
+
+volMult = input.float(1.5, "Volume Mult")
+slAtrMult = input.float(1.5, "SL ATR")
+
+vwapV  = ta.vwap
+atrV   = ta.atr(14)
+avgVol = ta.sma(volume, 20)
+volSpike = volume > avgVol * volMult
+
+crossUp = ta.crossover(close, vwapV) and volSpike
+crossDn = ta.crossunder(close, vwapV) and volSpike
+
+if crossUp and strategy.position_size == 0
+    sl = close - slAtrMult * atrV
+    risk = close - sl
+    strategy.entry("VW L", strategy.long)
+    strategy.exit("X", "VW L", stop=sl, limit=close + risk * 2.5)
+
+if crossDn and strategy.position_size == 0
+    sl = close + slAtrMult * atrV
+    risk = sl - close
+    strategy.entry("VW S", strategy.short)
+    strategy.exit("X", "VW S", stop=sl, limit=close - risk * 2.5)
+
+plot(vwapV, "VWAP", color.orange, 2)
+plotshape(crossUp, "L", shape.triangleup,   location.belowbar, color.lime)
+plotshape(crossDn, "S", shape.triangledown, location.abovebar, color.red)

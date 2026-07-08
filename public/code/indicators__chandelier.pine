@@ -1,0 +1,34 @@
+//@version=5
+strategy("Chandelier Exit", overlay=true,
+         default_qty_type=strategy.percent_of_equity, default_qty_value=10)
+
+period = input.int(22, "Period")
+mult   = input.float(3.0, "ATR Mult")
+emaLen = input.int(200, "Trend EMA")
+
+atrV     = ta.atr(period)
+longStop = ta.highest(high, period) - atrV * mult
+shortStop= ta.lowest(low, period) + atrV * mult
+emaT     = ta.ema(close, emaLen)
+
+longBO  = ta.crossover(close, shortStop) and close > emaT
+shortBO = ta.crossunder(close, longStop) and close < emaT
+
+if longBO and strategy.position_size == 0
+    sl = longStop
+    risk = close - sl
+    if risk > 0
+        strategy.entry("Ch L", strategy.long)
+        strategy.exit("X", "Ch L", stop=sl, limit=close + risk * 2.5)
+
+if shortBO and strategy.position_size == 0
+    sl = shortStop
+    risk = sl - close
+    if risk > 0
+        strategy.entry("Ch S", strategy.short)
+        strategy.exit("X", "Ch S", stop=sl, limit=close - risk * 2.5)
+
+plot(longStop,  "Long Stop",  color.red)
+plot(shortStop, "Short Stop", color.green)
+plotshape(longBO,  "L", shape.triangleup,   location.belowbar, color.lime)
+plotshape(shortBO, "S", shape.triangledown, location.abovebar, color.red)

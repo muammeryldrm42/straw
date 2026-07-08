@@ -1,0 +1,83 @@
+//@version=5
+// =====================================================
+// Tiered Exit Strategy (Memecoin) - Strategy Lab
+// =====================================================
+// Tiered profit-taking: partial exits at +50% / +150% / +300% levels,
+// moonbag tracking via trailing stop, hard SL protection.
+// =====================================================
+
+strategy("Tiered Exit (Memecoin)", overlay=true,
+         default_qty_type=strategy.percent_of_equity, default_qty_value=100,
+         pyramiding=0, calc_on_every_tick=true)
+
+// ============ ENTRY (basit momentum trigger) ============
+useSimpleEntry = input.bool(true, "Use simple momentum entry")
+emaFast = input.int(9, "EMA Fast")
+emaSlow = input.int(21, "EMA Slow")
+
+// ============ TIERED EXIT PARAMS ============
+tp1Pct   = input.float(50.0, "TP1 % gain") / 100
+tp2Pct   = input.float(150.0, "TP2 % gain") / 100
+tp3Pct   = input.float(300.0, "TP3 % gain") / 100
+sell1    = input.float(30.0, "TP1 sell %") / 100
+sell2    = input.float(30.0, "TP2 sell %") / 100
+sell3    = input.float(30.0, "TP3 sell %") / 100
+hardSL   = input.float(25.0, "Hard SL %") / 100
+trailDD  = input.float(35.0, "Trailing drawdown from ATH %") / 100
+
+ef = ta.ema(close, emaFast)
+es = ta.ema(close, emaSlow)
+entrySig = useSimpleEntry and ta.crossover(ef, es)
+
+if entrySig and strategy.position_size == 0
+    strategy.entry("Long", strategy.long)
+
+// ============ POSITION TRACKING ============
+var float entryPrice = na
+var float athPrice    = na
+var bool  tp1Done     = false
+var bool  tp2Done     = false
+var bool  tp3Done     = false
+
+if strategy.position_size > 0 and na(entryPrice)
+    entryPrice := strategy.position_avg_price
+    athPrice   := close
+    tp1Done := false
+    tp2Done := false
+    tp3Done := false
+
+if strategy.position_size > 0
+    athPrice := math.max(athPrice, high)
+
+// ============ TIERED EXITS ============
+if strategy.position_size > 0 and not na(entryPrice)
+    pctChange = (close - entryPrice) / entryPrice
+
+    // Hard SL
+    if pctChange <= -hardSL
+        strategy.close("Long", comment="Hard SL")
+        entryPrice := na
+
+    // Trailing stop (in profit zone)
+    ddFromAth = (athPrice - close) / athPrice
+    if pctChange > 0.30 and ddFromAth >= trailDD
+        strategy.close("Long", comment="Trail Stop")
+        entryPrice := na
+
+    // TP kademeleri
+    if not tp1Done and close >= entryPrice * (1 + tp1Pct)
+        strategy.close("Long", qty_percent=sell1 * 100, comment="TP1 +50%")
+        tp1Done := true
+    if not tp2Done and close >= entryPrice * (1 + tp2Pct)
+        strategy.close("Long", qty_percent=sell2 * 100, comment="TP2 +150%")
+        tp2Done := true
+    if not tp3Done and close >= entryPrice * (1 + tp3Pct)
+        strategy.close("Long", qty_percent=sell3 * 100, comment="TP3 +300%")
+        tp3Done := true
+
+if strategy.position_size == 0
+    entryPrice := na
+
+plot(ef, "EMA Fast", color.aqua)
+plot(es, "EMA Slow", color.orange)
+plotshape(entrySig, "Entry", shape.triangleup, location.belowbar, color.lime)
